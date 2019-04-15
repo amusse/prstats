@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+    <head>                          
+        <script src="sdk/scripts/VSS.SDK.min.js"></script>              
+        <script type="text/javascript">
+            VSS.init({
+                explicitNotifyLoaded: true,
+                usePlatformStyles: true
+            });
+
+            VSS.require(["TFS/Dashboards/WidgetHelpers", "TFS/VersionControl/GitRestClient", "VSS/Authentication/Services"], function (WidgetHelpers, gitClient, VSS_Auth_Service) {
+                WidgetHelpers.IncludeWidgetStyles();
+                VSS.register("PRStatsWidget", function () {                
+
+                    const client = gitClient.getClient();
+                    const webContext = VSS.getWebContext();
+
+                    var $prCount = $('#pr-count');
+                    var $iterationCount = $('#iteration-count');
+                    var $hourCount = $('#hour-count');
+                    var $commentCount = $('#comment-count');
+                    var $user = $('#user');
+                    var $repo = $('#repo');
+
+                    var getPRStats = function (widgetSettings) {
+                        var settings = JSON.parse(widgetSettings.customSettings.data);
+                        if (!settings || !settings.repositoryId) {
+                            var $data = $('#data');
+                            $data.empty();
+                            $data.text("Sorry nothing to show, please first configure this widget.");
+                            return WidgetHelpers.WidgetStatusHelper.Success();
+                        }
+
+                        console.log("Repository Id: "  + settings.repositoryId);
+                        console.log("User Id: "  + webContext.user.id);
+                        
+                        const PR_STATUS = 'Completed';
+                        const SEARCH_CRITERIA = {
+                            creatorId: webContext.user.id,
+                            status: PR_STATUS
+                        };
+
+                        return client.getPullRequests(settings.repositoryId, SEARCH_CRITERIA)
+                            .then(function (pullRequests) {
+                                const numberOfPRs = pullRequests && pullRequests.length;
+                                var avgNumHoursActivePerPR = 0;
+                                if (numberOfPRs > 0) {
+                                    var sumNumHoursActive = 0;
+                                    pullRequests.forEach(pr => {
+                                        const diffTime = Math.abs(pr.closedDate.getTime() - pr.creationDate.getTime());
+                                        const diffHours = Math.ceil(diffTime / (1000 * 60 * 60)); 
+                                        sumNumHoursActive = sumNumHoursActive + diffHours;
+                                    });
+                                    avgNumHoursActivePerPR = Math.round(sumNumHoursActive/numberOfPRs * 10) / 10;
+                                }
+                                
+                                $prCount.text(numberOfPRs);
+                                $hourCount.text(avgNumHoursActivePerPR);
+                                $user.text(webContext.user.name);
+                                $repo.text("Repo: " + settings.repoName);
+
+                                return getPRInfo(settings, pullRequests).then(function() {
+                                    return WidgetHelpers.WidgetStatusHelper.Success();
+                                });
+                            }, function (error) {                            
+                                return WidgetHelpers.WidgetStatusHelper.Failure(error.message);
+                            });
+
+                    }
+                    
+                    var getPRInfo = async function (settings, pullRequests) {
+                        VSS.getAccessToken().then(function(token) {
+                            var authHeader = VSS_Auth_Service.authTokenManager.getAuthorizationHeader(token);
+                            var sumOfIterations = 0;
+                            var sumOfComments = 0;
+                            var numberOfPRs = pullRequests.length;
+                            var promises = [];
+                            pullRequests.forEach(pr => {
+                                const iterationPromise = $.ajax({              
+                                    url: `https://dev.azure.com/${webContext.collection.name}/${settings.projectId}/_apis/git/repositories/${settings.repositoryId}/pullRequests/${pr.pullRequestId}/iterations?api-version=5.0`,
+                                    type: 'GET',
+                                    beforeSend: function (xhr) {
+                                            xhr.setRequestHeader('Authorization', authHeader); 
+                                        },
+                                    contentType: "application/json;",
+                                    dataType: "json",
+                                    success: function(data) {
+                                        sumOfIterations = sumOfIterations + data.count;
+                                    },
+                                    error: function(data, status, error) {
+                                        console.log("Euston we have a problem... " + error);                        
+                                    }
+                                });
+                                const commentPromise = $.ajax({              
+                                    url: `https://dev.azure.com/${webContext.collection.name}/${settings.projectId}/_apis/git/repositories/${settings.repositoryId}/pullRequests/${pr.pullRequestId}/threads?api-version=5.0`,
+                                    type: 'GET',
+                                    beforeSend: function (xhr) {
+                                            xhr.setRequestHeader('Authorization', authHeader); 
+                                        },
+                                    contentType: "application/json;",
+                                    dataType: "json",
+                                    success: function(data) {
+                                        sumOfComments = sumOfComments + data.count;
+                                    },
+                                    error: function(data, status, error) {
+                                        console.log("Euston we have a problem... " + error);                        
+                                    }
+                                });
+                                promises.push(iterationPromise);
+                                promises.push(commentPromise);
+                            });
+
+                            $.when.apply(null, promises).done(function() {
+                                const avgNumOfIterations = Math.round(sumOfIterations/numberOfPRs * 10) / 10;
+                                const avgNumOfComments = Math.round(sumOfComments/numberOfPRs * 10) / 10;
+                                console.log(avgNumOfIterations);
+                                console.log(avgNumOfComments);
+                                $iterationCount.text(isNaN(avgNumOfIterations) ? "N/A": avgNumOfIterations); 
+                                $commentCount.text(isNaN(avgNumOfComments) ? "N/A": avgNumOfComments);                      
+                            })
+                        }, function (error) {                            
+                            return WidgetHelpers.WidgetStatusHelper.Failure(error.message);
+                        });
+                    }
+
+                    return {
+                        load: function (widgetSettings) {
+                            return getPRStats(widgetSettings);
+
+                            return WidgetHelpers.WidgetStatusHelper.Success();
+                        },
+                        reload: function (widgetSettings) {
+                            return getPRStats(widgetSettings);
+                        }
+                    }
+                    
+                });
+                VSS.notifyLoadSucceeded();
+            });       
+        </script>
+    </head>
+    <style>
+            th, td {
+                padding-right: 25px;
+                padding-bottom: 50px;
+                font-weight: normal
+            }
+
+            .metadata {
+                margin-bottom: 30px;
+            }
+
+            .repo {
+                float: right;
+            }
+
+            .background {
+                background-color: white;
+            }
+    </style>
+    <body>
+        <div class="widget">
+            <h2 class="title">Pull Request Statistics</h2>
+            <div class="metadata">
+                <span class="description" id="user"></span>
+                <span class= "description repo" id="repo"></span>
+            </div>
+            <div id="data">
+                <table>
+                        <tr>
+                            <th>
+                                <div class="background">
+                                    <div class="description">Pull Requests</div>
+                                    <div class="big-count" id="pr-count"></div>
+                                    <div class="description">Total</div>
+                                </div>
+                            </th>
+                            <th>
+                                <div class="background">
+                                    <div class="description">Iterations per PR</div>
+                                    <div class="big-count" id="iteration-count"></div>
+                                    <div class="description">Average</div>
+                                </div>
+                            </th> 
+                        </tr>
+                        <tr>
+                            <th>
+                                <div class="background">
+                                    <div class="description">Hours PR is active</div>
+                                    <div class="big-count" id="hour-count"></div>
+                                    <div class="description">Average</div>
+                                </div>
+                            </th>
+                            <th>
+                                <div class="background">
+                                    <div class="description">Comments per PR</div>
+                                    <div class="big-count" id="comment-count"></div>
+                                    <div class="description">Average</div>
+                                </div>
+                            </th> 
+                        </tr>
+                    </table>
+            </div>
+        </div>
+    </body>
+</html>

@@ -1,0 +1,74 @@
+{
+    "manifestVersion": 1,
+    "id": "vsts-extensions-pr-statistics",
+    "version": "1.0.8",
+    "name": "Pull Request Statistics",
+    "description": "Pull request statistics widget to display pull request data like number of hours active, iterations, and comments.",
+    "publisher": "ahmusse",
+    "targets": [
+        {
+            "id": "Microsoft.VisualStudio.Services"
+        }
+    ],
+    "icons": {
+        "default": "img/logo.png"
+    },
+    "categories": ["Azure Repos"],
+    "tags": ["code", "pull requests", "dashboard widgets"],
+    "content": {
+        "details": {
+            "path": "overview.md"
+        }
+    },
+    "contributions": [
+        {
+            "id": "PRStatsWidget",
+            "type": "ms.vss-dashboards-web.widget",
+            "targets": [
+                "ms.vss-dashboards-web.widget-catalog",
+                "ahmusse.vsts-extensions-pr-statistics.PRStatsWidget.Configuration"
+            ],
+            "properties": {
+                "name": "Pull Request Statistics",
+                "description": "Widget to track pull request statistics like number of hours active, iterations, and comments.",
+                "catalogIconUrl": "img/CatalogIcon.png",
+                "previewImageUrl": "img/preview.png",                            
+                "uri": "pr-stats.html",
+                "supportedSizes": [
+                     {
+                            "rowSpan": 3,
+                            "columnSpan": 2
+                        }
+                    ],
+                "supportedScopes": ["project_team"]
+            }
+        },
+        {
+             "id": "PRStatsWidget.Configuration",
+             "type": "ms.vss-dashboards-web.widget-configuration",
+             "targets": [ "ms.vss-dashboards-web.widget-configuration" ],
+             "properties": {
+                 "name": "Pull Request Statistics Widget Configuration",
+                 "description": "Configures Pull Request Statistics Widget",
+                 "uri": "configuration.html"
+             }
+         }
+    ],
+    "files": [
+        {
+            "path": "pr-stats.html", "addressable": true
+        },
+        {
+            "path": "configuration.html", "addressable": true
+        },
+        {
+            "path": "sdk/scripts", "addressable": true
+        },
+        {
+            "path": "img", "addressable": true
+        }
+    ],
+    "scopes": [
+        "vso.code"
+    ]
+}

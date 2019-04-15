@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+    <html xmlns="http://www.w3.org/1999/xhtml">
+        <head>                          
+            <script src="sdk/scripts/VSS.SDK.min.js"></script> 
+            <script type="text/javascript">
+                VSS.init({                        
+                    explicitNotifyLoaded: true,
+                    usePlatformStyles: true
+                });
+        
+                VSS.require(["TFS/Dashboards/WidgetHelpers", "TFS/VersionControl/GitRestClient", "TFS/Core/RestClient", "VSS/Controls", "VSS/Controls/Combos"], function (WidgetHelpers, git, core, Controls, Combos) {
+                    VSS.register("PRStatsWidget.Configuration", function () {   
+                        const gitClient = git.getClient();
+                        const coreClient = core.getClient();
+
+                        var projectContainer = $(".project-container");
+                        var projectOptions = {
+                            width: "400px",
+                            height: "29px",
+                            cssClass: 'bowtie dropdown event-dropdown'
+                        };
+                        
+                        var repositoryContainer = $(".repository-container");
+                        var repositoryOptions = {
+                            width: "400px",
+                            height: "29px",
+                            cssClass: 'bowtie dropdown event-dropdown'
+                        };
+
+                        var repositoryId;
+                        var repositoryName;
+                        var projectId;
+                        var modelCombo;
+                        var repos;
+
+                        var getProjectInfo = function(widgetConfigurationContext) {
+                            return coreClient.getProjects()
+                                .then(function (projects) {
+                                    if (projects) {
+                                        projectOptions.source = projects.map(project => project.name);
+                                        projectOptions.change = function () {
+                                            const selectedProject = projects[this.getSelectedIndex()];
+                                            projectId = selectedProject.id;
+                                            modelCombo.setText("");
+                                            getRepoInfo(widgetConfigurationContext, selectedProject);
+                                        }
+
+                                        repositoryOptions.change = function () {
+                                            repositoryId = repos[this.getSelectedIndex()].id;
+                                            repositoryName = repos[this.getSelectedIndex()].name;
+                                            var customSettings = {data: JSON.stringify({repositoryId: repositoryId, 
+                                                                                repoName: repositoryName,
+                                                                                projectId: projectId})};
+                                            var eventName = WidgetHelpers.WidgetEvent.ConfigurationChange;
+                                            var eventArgs = WidgetHelpers.WidgetEvent.Args(customSettings);
+                                            widgetConfigurationContext.notify(eventName, eventArgs);
+                                        }
+                                        $("<label class='labels'/>").text("Project:").appendTo(projectContainer);
+                                        var makeCombo = Controls.create(Combos.Combo, projectContainer, projectOptions);
+                                        $("<label class='labels'/>").text("Repository:").appendTo(repositoryContainer);
+                                        modelCombo = Controls.create(Combos.Combo, repositoryContainer, repositoryOptions);
+                                    }
+                                }, function (error) {
+                                    return WidgetHelpers.WidgetStatusHelper.Failure(error.message);
+                                });
+                        }
+
+
+                        var getRepoInfo = function(widgetConfigurationContext, project) {
+                            return gitClient.getRepositories(project.id)
+                                .then(function (repositories) {
+                                    repos = repositories;
+                                    if (repositories) {
+                                        modelCombo.setSource(repositories.map(repository => repository.name));
+                                    }
+                                    return WidgetHelpers.WidgetStatusHelper.Success();
+                                }, function (error) {                            
+                                    return WidgetHelpers.WidgetStatusHelper.Failure(error.message);
+                                });
+                        };
+
+                        return {
+                            load: function (widgetSettings, widgetConfigurationContext) {
+                                return getProjectInfo(widgetConfigurationContext);
+                                return WidgetHelpers.WidgetStatusHelper.Success();
+                            },
+                            onSave: function() {
+                                var customSettings = {
+                                    data: JSON.stringify({
+                                            repositoryId: repositoryId,
+                                            repoName: repositoryName,
+                                            projectId: projectId
+                                        })
+                                };
+                                return WidgetHelpers.WidgetConfigurationSave.Valid(customSettings); 
+                            }
+                        }
+                    });
+                    VSS.notifyLoadSucceeded();
+                });
+            </script>             
+        </head>
+        <style>
+                .project {
+                    margin-bottom: 30px;
+                }
+
+                .labels {
+                    font-size: 14px;
+                    margin-bottom: 5px;
+                }
+        </style>
+        <body>
+            <div class="widget-configuration">
+                    <div>
+                        <div class="project-container project"/>
+                    </div>
+                    <div>
+                        <div class="repository-container"/>
+                    </div>
+            </div>
+        </body>
+    </html>
